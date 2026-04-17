@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Presensi Al Irsyad Al Islamiyyah</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Library untuk Ekspor Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap');
+        
+        :root {
+            --primary-green: #064e3b;
+            --accent-green: #059669;
+        }
+
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: #f0fdf4; 
+        }
+
+        .glass-modal { 
+            backdrop-filter: blur(16px); 
+            background-color: rgba(6, 78, 59, 0.8); 
+        }
+
+        .btn-main {
+            background: linear-gradient(135deg, #059669 0%, #064e3b 100%);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-main:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 40px -10px rgba(5, 150, 105, 0.5);
+        }
+
+        .btn-main::after {
+            content: '';
+            position: absolute;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%);
+            transform: scale(0);
+            transition: transform 0.6s;
+        }
+
+        .btn-main:active::after {
+            transform: scale(1);
+        }
+
+        #video { 
+            transform: scaleX(-1); 
+            object-fit: cover; 
+            border-radius: 2.5rem;
+            border: 6px solid white;
+        }
+
+        .tab-active {
+            border-bottom: 4px solid #065f46;
+            color: #065f46;
+        }
+
+        .modal-zoom { 
+            animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); 
+        }
+        @keyframes zoomIn { 
+            from { transform: scale(0.9) translateY(20px); opacity: 0; } 
+            to { transform: scale(1) translateY(0); opacity: 1; } 
+        }
+
+        .pulse-animation {
+            animation: pulse-ring 2s infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            70% { box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-900 leading-relaxed">
+
+    <!-- MODAL KONFIRMASI -->
+    <div id="confirmModal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 glass-modal">
+        <div class="bg-white rounded-[3rem] max-w-sm w-full p-10 shadow-2xl relative modal-zoom border border-emerald-100 text-center">
+            <h3 id="confirmTitle" class="text-2xl font-black text-emerald-950">Konfirmasi</h3>
+            <p id="confirmMessage" class="text-emerald-700/60 font-medium text-sm mt-3 mb-8"></p>
+            <div class="flex flex-col gap-3">
+                <button id="confirmYesBtn" class="w-full py-5 bg-emerald-900 text-white font-black rounded-3xl shadow-xl hover:bg-emerald-800 uppercase tracking-widest">Ya, Lanjutkan</button>
+                <button onclick="closeConfirm()" class="w-full py-4 bg-slate-100 text-slate-500 font-bold rounded-3xl uppercase tracking-widest">Batal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL IMPORT MASSAL -->
+    <div id="importModal" class="fixed inset-0 z-[150] hidden flex items-center justify-center p-4 glass-modal">
+        <div class="bg-white rounded-[3rem] max-w-lg w-full p-10 shadow-2xl relative modal-zoom border border-emerald-100">
+            <h3 class="text-2xl font-black text-emerald-950 mb-2">Import Pegawai</h3>
+            <p class="text-slate-500 text-sm mb-6">Masukkan daftar nama (satu nama per baris)</p>
+            <select id="importUnitSelect" class="w-full p-4 bg-emerald-50 rounded-2xl mb-4 font-bold outline-none border-2 border-transparent focus:border-emerald-500"></select>
+            <textarea id="importArea" rows="8" placeholder="Contoh:&#10;Ahmad Fauzi&#10;Siti Aminah&#10;Budi Hartono" class="w-full p-5 bg-emerald-50 rounded-2xl outline-none font-medium text-sm border-2 border-transparent focus:border-emerald-500"></textarea>
+            <div class="grid grid-cols-2 gap-4 mt-6">
+                <button onclick="document.getElementById('importModal').classList.add('hidden')" class="py-4 bg-slate-100 text-slate-500 font-bold rounded-2xl uppercase text-xs">Batal</button>
+                <button onclick="processImport()" class="py-4 bg-emerald-900 text-white font-black rounded-2xl uppercase text-xs tracking-widest">Import Sekarang</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PANDUAN GOOGLE SHEETS MODAL -->
+    <div id="setupModal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 glass-modal">
+        <div class="bg-white rounded-[3rem] max-w-2xl w-full p-10 shadow-2xl relative modal-zoom">
+            <h3 class="text-2xl font-black text-emerald-950 mb-4">Script Google Sheets (FIX TANGGAL)</h3>
+            <div class="space-y-4 text-sm text-emerald-900">
+                <p>Salin kode di bawah ini ke Apps Script. Kode ini akan menangkap tanggal dan waktu dari aplikasi secara akurat:</p>
+                <pre class="bg-emerald-50 p-4 rounded-xl text-[11px] font-mono border border-emerald-100 text-emerald-800 overflow-x-auto">
+function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(["TANGGAL", "WAKTU", "NAMA PEGAWAI", "UNIT KERJA", "STATUS"]);
+    sheet.getRange("A1:E1").setFontWeight("bold").setBackground("#064e3b").setFontColor("#ffffff");
+  }
+  
+  // Menggunakan data tanggal dan waktu yang dikirim dari aplikasi
+  // Atau menggunakan waktu server Google jika data tidak ada
+  var tgl = data.tanggal || new Date().toLocaleDateString('id-ID');
+  var wkt = data.waktu || new Date().toLocaleTimeString('id-ID');
+
+  sheet.appendRow([tgl, wkt, data.nama, data.unit, data.status]);
+  
+  return ContentService.createTextOutput("Success");
+}</pre>
+                <p class="text-rose-600 font-bold">Penting: Pastikan Anda klik "Deploy" -> "New Deployment" -> "Web App" dan pilih "Anyone" pada "Who has access".</p>
+            </div>
+            <button onclick="closeSetup()" class="w-full mt-8 py-4 bg-emerald-900 text-white font-black rounded-3xl uppercase">Tutup</button>
+        </div>
+    </div>
+
+    <!-- NOTIFIKASI TOAST -->
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[210] hidden">
+        <div class="bg-white text-emerald-900 px-8 py-5 rounded-3xl shadow-2xl flex items-center gap-4 border border-emerald-100">
+            <div id="toastIcon" class="bg-emerald-500 p-2 rounded-2xl text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" /></svg>
+            </div>
+            <div>
+                <p id="toastTitle" class="font-extrabold text-sm uppercase tracking-tight">Info</p>
+                <p id="toastMessage" class="text-xs text-emerald-700/70"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- NAVIGASI -->
+    <nav class="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-emerald-100 px-6 py-5">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <div class="bg-emerald-900 p-2.5 rounded-2xl shadow-xl">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-emerald-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-black text-xl tracking-tight text-emerald-950">Smart Presensi</h1>
+                    <p class="text-[10px] text-emerald-600 font-bold uppercase tracking-[0.2em]">Al Irsyad Al Islamiyyah</p>
+                </div>
+            </div>
+            <button onclick="handleAdminAccess()" class="flex items-center gap-2 bg-emerald-950 hover:bg-emerald-800 text-white px-6 py-3 rounded-2xl text-xs font-bold transition-all shadow-lg">
+                <span id="navText">Portal Admin</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- HALAMAN GURU -->
+    <main id="guruPage" class="container mx-auto max-w-xl p-6 py-12 md:py-20">
+        <div class="bg-white rounded-[4rem] shadow-2xl p-10 md:p-14 border border-emerald-50 relative overflow-hidden">
+            <!-- Dekorasi -->
+            <div class="absolute -top-24 -right-24 w-64 h-64 bg-emerald-50 rounded-full opacity-50"></div>
+            
+            <div class="relative z-10">
+                <div class="mb-12 text-center">
+                    <span class="bg-emerald-100 text-emerald-800 text-[10px] font-black px-5 py-2 rounded-full uppercase tracking-widest">Portal Presensi</span>
+                    <h2 class="text-4xl font-black text-emerald-950 mt-6 leading-tight">Mulai Kehadiran</h2>
+                    <p class="text-slate-500 mt-3 font-medium">Lakukan verifikasi identitas Anda</p>
+                </div>
+
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-3 ml-1">Pilih Unit</label>
+                        <select id="unitSelect" onchange="updateGuruDropdown()" class="w-full p-5 bg-emerald-50/50 border-2 border-emerald-100 rounded-3xl focus:border-emerald-600 outline-none text-emerald-950 font-bold appearance-none transition-all">
+                            <option value="">-- Pilih Unit Kerja --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-3 ml-1">Pilih Nama</label>
+                        <select id="guruSelect" class="w-full p-5 bg-emerald-50/50 border-2 border-emerald-100 rounded-3xl focus:border-emerald-600 outline-none text-emerald-950 font-bold appearance-none transition-all">
+                            <option value="">-- Pilih Nama Pegawai --</option>
+                        </select>
+                    </div>
+
+                    <button onclick="openCameraModal()" class="btn-main pulse-animation w-full text-white font-black py-8 rounded-[2.5rem] shadow-2xl active:scale-[0.97] mt-10 flex items-center justify-center gap-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span class="text-2xl tracking-tight uppercase">Mulai Presensi</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- MODAL KAMERA -->
+    <div id="cameraModal" class="fixed inset-0 z-[50] hidden flex items-center justify-center p-4 glass-modal">
+        <div class="bg-white rounded-[3.5rem] max-w-4xl w-full overflow-hidden shadow-2xl relative modal-zoom border-8 border-white">
+            <div class="p-8 flex justify-between items-center bg-white border-b border-emerald-50">
+                <div>
+                    <h3 class="font-black text-xl text-emerald-950">Verifikasi Wajah</h3>
+                    <p id="activeUserLabel" class="text-xs text-emerald-600 font-bold mt-1 uppercase tracking-tight"></p>
+                </div>
+                <button onclick="closeCameraModal()" class="bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white p-3 rounded-2xl transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="px-8 py-6">
+                <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 mb-6 rounded-r-2xl">
+                    <p class="text-emerald-900 font-bold text-sm">💡 Instruksi:</p>
+                    <p class="text-emerald-700 text-xs mt-1">Pastikan <span class="font-black">wajah terlihat jelas</span> dan latar belakang ikut terfoto sebagai bukti.</p>
+                </div>
+
+                <div class="relative bg-black rounded-[3rem] overflow-hidden aspect-video shadow-2xl">
+                    <video id="video" class="w-full h-full" autoplay playsinline></video>
+                    <canvas id="canvas" class="hidden"></canvas>
+                </div>
+                <button onclick="processCapture()" class="w-full mt-8 btn-main text-white font-black py-6 rounded-3xl shadow-xl text-xl uppercase tracking-widest">
+                    AMBIL FOTO PRESENSI
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HALAMAN ADMIN -->
+    <main id="adminPage" class="container mx-auto p-6 hidden">
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6 bg-white p-8 rounded-[3rem] border border-emerald-100 shadow-sm">
+            <div class="flex items-center gap-5">
+                <div class="bg-emerald-50 p-4 rounded-3xl text-emerald-900">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                </div>
+                <div>
+                    <h2 class="text-3xl font-black text-emerald-950">Portal Admin</h2>
+                    <div class="flex gap-6 mt-2">
+                        <button onclick="switchAdminTab('queue')" id="tab-queue" class="text-xs font-black uppercase tracking-widest pb-1 tab-active">Antrean</button>
+                        <button onclick="switchAdminTab('history')" id="tab-history" class="text-xs font-black uppercase tracking-widest pb-1 text-slate-400">Riwayat</button>
+                        <button onclick="switchAdminTab('data')" id="tab-data" class="text-xs font-black uppercase tracking-widest pb-1 text-slate-400">Pengaturan</button>
+                    </div>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="exportToExcel()" class="bg-emerald-100 text-emerald-800 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-200">Ekspor Excel</button>
+            </div>
+        </header>
+
+        <!-- TAB ANTREAN -->
+        <div id="adminQueueSection">
+    <!-- 🔥 TAMBAHKAN DI SINI -->
+            <div class="mb-4 flex items-center gap-2 px-2">
+                <span class="text-sm font-bold text-slate-600">Antrian Menunggu</span>
+                <span id="count-menunggu" 
+                      class="bg-amber-100 text-amber-600 text-xs font-bold px-2 py-1 rounded-full">
+                     0
+                </span>
+            </div>
+            <div class="bg-white rounded-[3.5rem] border border-emerald-50 shadow-2xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-emerald-50/50">
+                            <tr>
+                                <th class="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-emerald-900">Foto</th>
+                                <th class="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-emerald-900">Pegawai</th>
+                                <th class="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-emerald-900 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="validationList" class="divide-y divide-emerald-50"></tbody>
+                    </table>
+                </div>
+                <div id="emptyQueue" class="hidden text-center py-20 italic text-slate-400 font-bold uppercase text-[10px]">Antrean Kosong</div>
+            </div>
+        </div>
+
+        <!-- TAB RIWAYAT -->
+        <div id="adminHistorySection" class="hidden">
+            <div class="bg-white rounded-[3.5rem] border border-emerald-50 shadow-2xl overflow-hidden">
+                <div class="overflow-x-auto max-h-[70vh]">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Waktu</th>
+                                <th class="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Pegawai</th>
+                                <th class="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Unit</th>
+                                <th class="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyList" class="divide-y divide-slate-50"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB PENGATURAN -->
+        <div id="adminDataSection" class="hidden space-y-8">
+            <div class="bg-emerald-950 p-10 rounded-[3rem] text-white">
+                <div class="flex flex-col md:flex-row gap-8 items-center">
+                    <div class="flex-1">
+                        <h3 class="text-2xl font-black mb-2 flex items-center gap-2">Google Web App URL <button onclick="openSetup()" class="text-emerald-400 text-xs underline">klik untuk kode script</button></h3>
+                        <p class="text-emerald-100/60 text-sm">Alamat script Google Sheets untuk sinkronisasi data.</p>
+                    </div>
+                    <div class="w-full md:w-2/3 flex gap-3">
+                        <input type="text" id="webhookUrlInput" placeholder="https://script.google.com/..." class="flex-1 p-5 bg-white/10 rounded-3xl border border-white/20 outline-none focus:bg-white/20 font-bold">
+                        <button onclick="saveWebhook()" class="px-8 bg-emerald-500 text-emerald-950 font-black rounded-3xl uppercase tracking-widest text-xs">Simpan</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="bg-white p-10 rounded-[3rem] border border-emerald-100 shadow-xl">
+                    <h3 class="text-xl font-black text-emerald-950 mb-6">Kelola Unit</h3>
+                    <div class="flex gap-3">
+                        <input type="text" id="newCategoryInput" placeholder="Nama Unit" class="flex-1 p-5 bg-emerald-50 rounded-2xl outline-none font-bold text-sm">
+                        <button onclick="addNewUnit()" class="px-8 bg-emerald-900 text-white font-black rounded-2xl uppercase text-[10px]">Tambah</button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-10 rounded-[3rem] border border-emerald-100 shadow-xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-black text-emerald-950">Pegawai Massal</h3>
+                        <button onclick="openImport()" class="text-emerald-600 font-black text-xs uppercase tracking-widest underline">Import Massal</button>
+                    </div>
+                    <div class="flex flex-col gap-4">
+                        <div class="flex gap-3">
+                            <select id="dataUnitSelect" class="flex-1 p-5 bg-emerald-50 rounded-2xl font-bold outline-none"></select>
+                            <input type="text" id="newDataName" placeholder="Nama Pegawai" class="flex-[2] p-5 bg-emerald-50 rounded-2xl outline-none font-bold text-sm">
+                        </div>
+                        <button onclick="addPegawaiManual()" class="w-full py-5 bg-emerald-900 text-white font-black rounded-2xl uppercase tracking-widest text-xs">Tambah Tunggal</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-[3.5rem] border border-emerald-100 shadow-2xl overflow-hidden">
+                <div class="overflow-x-auto max-h-[50vh]">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 border-b">
+                            <tr>
+                                <th class="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Unit</th>
+                                <th class="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Pegawai</th>
+                                <th class="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Hapus</th>
+                            </tr>
+                        </thead>
+                        <tbody id="masterPegawaiList" class="divide-y divide-slate-50"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- MODAL AKSES ADMIN -->
+    <div id="adminLoginModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 glass-modal">
+        <div class="bg-white rounded-[3rem] max-w-md w-full p-12 shadow-2xl relative border border-emerald-100 modal-zoom text-center">
+            <h3 class="text-3xl font-black text-emerald-950">Login Admin</h3>
+            <p class="text-slate-500 mt-2 mb-10 font-medium">Masukkan kode akses</p>
+            <input type="password" id="adminPassword" placeholder="••••••••" class="w-full p-6 bg-emerald-50 rounded-3xl outline-none text-center font-black tracking-[0.5em] text-2xl mb-6">
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="document.getElementById('adminLoginModal').classList.add('hidden')" class="py-5 bg-slate-100 text-slate-500 font-bold rounded-3xl">BATAL</button>
+                <button onclick="checkAdminPassword()" class="py-5 bg-emerald-900 text-white font-black rounded-3xl uppercase">MASUK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PREVIEW FOTO MODAL -->
+    <div id="photoPreviewModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 glass-modal" onclick="closePhotoPreview()">
+        <div class="bg-white rounded-[4rem] max-w-2xl w-full overflow-hidden shadow-2xl relative modal-zoom border-8 border-white">
+            <img id="modalPreviewImg" src="" class="w-full aspect-video object-cover">
+            <div class="p-10 bg-emerald-950 text-white text-center">
+                <h3 id="modalPreviewName" class="text-3xl font-black"></h3>
+                <p id="modalPreviewDetail" class="text-emerald-100/70 font-semibold mt-1 uppercase text-sm"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIG & STATE
+        const INITIAL_GURU = {
+            "Guru SD": ["Ust. Ahmad Fauzi", "Ustz. Ratna Sari"],
+            "Guru SMP": ["Ust. Dr. Budi", "Ustz. Nur Azizah"],
+            "Guru SMA": ["Ust. Faisal Anwar", "Ustz. Linda"]
+        };
+
+        let presenceQueue = JSON.parse(localStorage.getItem('presenceQueue')) || [];
+        let guruDatabase = JSON.parse(localStorage.getItem('guruDatabase')) || {...INITIAL_GURU};
+        let webhookUrl = localStorage.getItem('webhookUrl') || "";
+        let stream = null;
+        let viewMode = 'guru';
+        let pendingAction = null;
+
+        // UI HELPERS
+        function showToast(title, msg) {
+            const t = document.getElementById('toast');
+            document.getElementById('toastTitle').innerText = title;
+            document.getElementById('toastMessage').innerText = msg;
+            t.classList.remove('hidden');
+            setTimeout(() => t.classList.add('hidden'), 3000);
+        }
+
+        function openConfirm(title, msg, callback) {
+            document.getElementById('confirmTitle').innerText = title;
+            document.getElementById('confirmMessage').innerText = msg;
+            document.getElementById('confirmModal').classList.remove('hidden');
+            pendingAction = callback;
+        }
+
+        function closeConfirm() { document.getElementById('confirmModal').classList.add('hidden'); }
+
+        document.getElementById('confirmYesBtn').onclick = () => { if(pendingAction) pendingAction(); closeConfirm(); };
+
+        // APP LOGIC
+        function renderUnitOptions() {
+            const keys = Object.keys(guruDatabase).sort();
+            const options = `<option value="">-- Pilih Unit --</option>` + keys.map(k => `<option value="${k}">${k}</option>`).join('');
+            document.getElementById('unitSelect').innerHTML = options;
+            document.getElementById('dataUnitSelect').innerHTML = options;
+            document.getElementById('importUnitSelect').innerHTML = options;
+        }
+
+        function updateGuruDropdown() {
+            const unit = document.getElementById('unitSelect').value;
+            const select = document.getElementById('guruSelect');
+            if(!unit) { select.innerHTML = `<option value="">-- Pilih Nama --</option>`; return; }
+            const list = guruDatabase[unit] || [];
+            select.innerHTML = `<option value="">-- Pilih Nama --</option>` + list.sort().map(n => `<option value="${n}">${n}</option>`).join('');
+        }
+
+        async function openCameraModal() {
+            const unit = document.getElementById('unitSelect').value;
+            const nama = document.getElementById('guruSelect').value;
+            if(!unit || !nama) return showToast("Gagal", "Pilih Unit & Nama dulu!");
+
+            document.getElementById('activeUserLabel').innerText = `${nama} (${unit})`;
+            document.getElementById('cameraModal').classList.remove('hidden');
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 1280, height: 720 } });
+                document.getElementById('video').srcObject = stream;
+            } catch(e) {
+                showToast("Error", "Gagal akses kamera.");
+                closeCameraModal();
+            }
+        }
+
+        function closeCameraModal() {
+            document.getElementById('cameraModal').classList.add('hidden');
+            if(stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+        }
+
+        function processCapture() {
+            const v = document.getElementById('video');
+            const c = document.getElementById('canvas');
+            const ctx = c.getContext('2d');
+            
+            const now = new Date();
+            // Gunakan format lokal Indonesia yang eksplisit
+            const waktuStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const tanggalStr = now.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            c.width = 1280; c.height = 720;
+            
+            ctx.save();
+            ctx.translate(c.width, 0); 
+            ctx.scale(-1, 1);
+            ctx.drawImage(v, 0, 0, c.width, c.height);
+            ctx.restore();
+
+            // Watermark
+            const watermarkText = `${tanggalStr} - ${waktuStr}`;
+            ctx.font = 'bold 28px "Plus Jakarta Sans", sans-serif';
+            ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+            ctx.shadowBlur = 8;
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.4)";
+            
+            const textWidth = ctx.measureText(watermarkText).width;
+            const posX = c.width - textWidth - 50;
+            const posY = c.height - 50;
+
+            ctx.fillStyle = "rgba(6, 78, 59, 0.6)"; 
+            const padding = 15;
+            ctx.beginPath();
+            ctx.roundRect(posX - padding, posY - 30 - padding, textWidth + (padding * 2), 40 + padding, 15);
+            ctx.fill();
+
+            ctx.strokeText(watermarkText, posX, posY);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText(watermarkText, posX, posY);
+
+            const item = {
+                id: Date.now(),
+                nama: document.getElementById('guruSelect').value,
+                unit: document.getElementById('unitSelect').value,
+                waktu: waktuStr,
+                tanggal: tanggalStr,
+                foto: c.toDataURL('image/jpeg', 0.8),
+                status: 'pending'
+            };
+
+            presenceQueue.unshift(item);
+            localStorage.setItem('presenceQueue', JSON.stringify(presenceQueue));
+            closeCameraModal();
+            showToast("Sukses", "Foto presensi tersimpan di antrean.");
+        }
+
+        function handleAdminAccess() {
+            if(viewMode === 'guru') document.getElementById('adminLoginModal').classList.remove('hidden');
+            else toggleView();
+        }
+
+        function checkAdminPassword() {
+            if(document.getElementById('adminPassword').value === 'admin123') {
+                document.getElementById('adminLoginModal').classList.add('hidden');
+                document.getElementById('adminPassword').value = '';
+                toggleView();
+            } else showToast("Gagal", "Kode Akses Salah");
+        }
+
+        function toggleView() {
+            const g = document.getElementById('guruPage');
+            const a = document.getElementById('adminPage');
+            const nt = document.getElementById('navText');
+            if(viewMode === 'guru') {
+                viewMode = 'admin'; g.classList.add('hidden'); a.classList.remove('hidden'); nt.innerText = "Keluar Portal";
+                switchAdminTab('queue');
+            } else {
+                viewMode = 'guru'; g.classList.remove('hidden'); a.classList.add('hidden'); nt.innerText = "Portal Admin";
+            }
+        }
+
+        function switchAdminTab(tab) {
+            const q = document.getElementById('adminQueueSection');
+            const h = document.getElementById('adminHistorySection');
+            const d = document.getElementById('adminDataSection');
+            
+            [q, h, d].forEach(el => el.classList.add('hidden'));
+            ['tab-queue', 'tab-history', 'tab-data'].forEach(t => document.getElementById(t).classList.remove('tab-active', 'text-slate-400'));
+
+            if(tab === 'queue') { q.classList.remove('hidden'); document.getElementById('tab-queue').classList.add('tab-active'); renderQueue(); }
+            else if(tab === 'history') { h.classList.remove('hidden'); document.getElementById('tab-history').classList.add('tab-active'); renderHistory(); }
+            else { d.classList.remove('hidden'); document.getElementById('tab-data').classList.add('tab-active'); renderMaster(); }
+        }
+
+        function updateJumlahMenunggu() {
+            const jumlah = presenceQueue.filter(item => item.status === 'pending').length;
+            document.getElementById('count-menunggu').innerText = jumlah;
+        }
+
+        function renderQueue() {
+            updateJumlahMenunggu();
+            const list = document.getElementById('validationList');
+            const empty = document.getElementById('emptyQueue');
+            const pending = presenceQueue.filter(x => x.status === 'pending');
+
+            if(pending.length === 0) { list.innerHTML = ""; empty.classList.remove('hidden'); return; }
+            empty.classList.add('hidden');
+            list.innerHTML = pending.map(i => `
+                <tr class="hover:bg-emerald-50/50">
+                    <td class="px-8 py-6"><img src="${i.foto}" class="w-16 h-10 rounded-lg object-cover cursor-pointer" onclick="openPhotoPreview('${i.foto}','${i.nama}','${i.unit}','${i.waktu}')"></td>
+                    <td class="px-8 py-6">
+                        <div class="font-black text-emerald-950">${i.nama}</div>
+                        <div class="text-[10px] text-emerald-600 font-bold uppercase">${i.unit} • ${i.waktu}</div>
+                    </td>
+                    <td class="px-8 py-6">
+                        <div id="act-${i.id}" class="flex gap-2 justify-center">
+                            <button onclick="validate(${i.id}, 'sah')" class="bg-emerald-600 text-white px-5 py-2 rounded-xl text-[10px] font-black">SAHKAN</button>
+                            <button onclick="validate(${i.id}, 'tolak')" class="bg-rose-50 text-rose-500 px-5 py-2 rounded-xl text-[10px] font-black">TOLAK</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('historyList');
+            const history = presenceQueue.filter(x => x.status !== 'pending');
+            list.innerHTML = history.map(i => `
+                <tr class="text-xs">
+                    <td class="px-8 py-5 text-slate-400 font-medium">${i.tanggal} ${i.waktu}</td>
+                    <td class="px-8 py-5 font-bold text-slate-700">${i.nama}</td>
+                    <td class="px-8 py-5 text-slate-500">${i.unit}</td>
+                    <td class="px-8 py-5 text-center">
+                        <span class="px-3 py-1 rounded-full font-black text-[9px] uppercase ${i.status === 'sah' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">${i.status}</span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function validate(id, status) {
+            const item = presenceQueue.find(x => x.id === id);
+            if(!item) return;
+
+            if(status === 'sah' && webhookUrl) {
+                const btn = document.getElementById(`act-${id}`);
+                btn.innerHTML = `<span class="text-[10px] font-bold animate-pulse">MENGIRIM...</span>`;
+                try {
+                    // MENGIRIM DATA LENGKAP TERMASUK TANGGAL DAN WAKTU
+                    await fetch(webhookUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        body: JSON.stringify({ 
+                            nama: item.nama, 
+                            unit: item.unit, 
+                            tanggal: item.tanggal, 
+                            waktu: item.waktu, 
+                            status: "SAH" 
+                        })
+                    });
+                } catch(e) { console.error(e); }
+            }
+
+            item.status = status;
+            localStorage.setItem('presenceQueue', JSON.stringify(presenceQueue));
+            renderQueue();
+            renderHistory();
+            
+            updateJumlahMenunggu();
+        }
+
+        function renderMaster() {
+            const list = document.getElementById('masterPegawaiList');
+            let html = "";
+            Object.keys(guruDatabase).sort().forEach(unit => {
+                html += `<tr class="bg-slate-50/50"><td class="px-8 py-4 font-black text-emerald-950">${unit}</td><td></td><td class="text-center"><button onclick="deleteUnit('${unit}')" class="text-rose-400 font-bold text-[9px]">HAPUS UNIT</button></td></tr>`;
+                guruDatabase[unit].forEach((n, idx) => {
+                    html += `<tr><td class="px-8 py-3 text-[10px] text-slate-300">— ${unit}</td><td class="px-8 py-3 text-sm font-bold text-slate-600">${n}</td><td class="px-8 py-3 text-center"><button onclick="deleteGuru('${unit}', ${idx})" class="text-slate-300 hover:text-rose-500">×</button></td></tr>`;
+                });
+            });
+            list.innerHTML = html;
+            renderUnitOptions();
+        }
+
+        function openImport() { document.getElementById('importModal').classList.remove('hidden'); }
+        
+        function processImport() {
+            const unit = document.getElementById('importUnitSelect').value;
+            const text = document.getElementById('importArea').value.trim();
+            if(!unit || !text) return showToast("Gagal", "Unit atau Nama tidak boleh kosong");
+            
+            const names = text.split('\n').map(n => n.trim()).filter(n => n !== "");
+            guruDatabase[unit] = [...new Set([...guruDatabase[unit], ...names])];
+            saveData();
+            document.getElementById('importArea').value = "";
+            document.getElementById('importModal').classList.add('hidden');
+            showToast("Sukses", `Berhasil import ${names.length} pegawai.`);
+        }
+
+        function addNewUnit() {
+            const val = document.getElementById('newCategoryInput').value.trim();
+            if(!val) return;
+            guruDatabase[val] = [];
+            saveData();
+            document.getElementById('newCategoryInput').value = "";
+        }
+
+        function addPegawaiManual() {
+            const u = document.getElementById('dataUnitSelect').value;
+            const n = document.getElementById('newDataName').value.trim();
+            if(!u || !n) return;
+            guruDatabase[u].push(n);
+            saveData();
+            document.getElementById('newDataName').value = "";
+        }
+
+        function deleteUnit(u) { openConfirm('Hapus Unit?', `Hapus unit ${u}?`, () => { delete guruDatabase[u]; saveData(); }); }
+        function deleteGuru(u, i) { guruDatabase[u].splice(i, 1); saveData(); }
+        function saveData() { localStorage.setItem('guruDatabase', JSON.stringify(guruDatabase)); renderMaster(); renderUnitOptions(); updateGuruDropdown(); }
+        function saveWebhook() { webhookUrl = document.getElementById('webhookUrlInput').value.trim(); localStorage.setItem('webhookUrl', webhookUrl); showToast("Sukses", "Link tersimpan."); }
+
+        function exportToExcel() {
+            const sah = presenceQueue.filter(x => x.status === 'sah');
+            if(sah.length === 0) return showToast("Info", "Tidak ada data sah untuk diekspor.");
+            const data = sah.map(i => ({ "Tanggal": i.tanggal, "Waktu": i.waktu, "Nama Pegawai": i.nama, "Unit Kerja": i.unit, "Status": "SAH" }));
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(data);
+            XLSX.utils.book_append_sheet(wb, ws, "Laporan Presensi");
+            XLSX.writeFile(wb, `Laporan_Presensi_${Date.now()}.xlsx`);
+        }
+
+        function openPhotoPreview(s, n, u, w) {
+            document.getElementById('modalPreviewImg').src = s;
+            document.getElementById('modalPreviewName').innerText = n;
+            document.getElementById('modalPreviewDetail').innerText = `${u} • ${w}`;
+            document.getElementById('photoPreviewModal').classList.remove('hidden');
+        }
+        function closePhotoPreview() { document.getElementById('photoPreviewModal').classList.add('hidden'); }
+        function openSetup() { document.getElementById('setupModal').classList.remove('hidden'); }
+        function closeSetup() { document.getElementById('setupModal').classList.add('hidden'); }
+
+        window.onload = () => { renderUnitOptions(); renderMaster(); };
+    </script>
+</body>
+</html>
