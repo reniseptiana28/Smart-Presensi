@@ -398,7 +398,7 @@ function doPost(e) {
         };
 
         let presenceQueue = JSON.parse(localStorage.getItem('presenceQueue')) || [];
-        let guruDatabase = JSON.parse(localStorage.getItem('guruDatabase')) || {...INITIAL_GURU};
+        let guruDatabase = {};
         let webhookUrl = localStorage.getItem('webhookUrl') || "";
         let stream = null;
         let viewMode = 'guru';
@@ -674,7 +674,7 @@ function doPost(e) {
         const data = await res.json();  
         guruDatabase = data;  
         renderUnitOptions();
-        renderNamaOptions();
+        updateGuruDropdown(); 
         }
           
 
@@ -737,7 +737,8 @@ function doPost(e) {
         function openSetup() { document.getElementById('setupModal').classList.remove('hidden'); }
         function closeSetup() { document.getElementById('setupModal').classList.add('hidden'); }
 
-        window.onload = () => { renderUnitOptions(); renderMaster(); };
+        window.onload = () => { loadGuruFromSheet(); 
+        };
         loadGuruFromSheet();
     </script>
 </body>
