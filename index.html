@@ -669,14 +669,25 @@ function doPost(e) {
             document.getElementById('newCategoryInput').value = "";
         }
         
-        async function loadGuruFromSheet() {  
-        const res = await fetch(webhookUrl);  
-        const data = await res.json();  
-        guruDatabase = data;  
-        renderUnitOptions();
-        updateGuruDropdown(); 
+        async function loadGuruFromSheet() {
+            try {
+                const res = await fetch(webhookUrl);
+                const text = await res.text();
+        
+                console.log("RESPONSE:", text); // DEBUG
+        
+                const data = JSON.parse(text);
+        
+                guruDatabase = data;
+        
+                renderUnitOptions();
+                updateGuruDropdown();
+        
+            } catch (err) {
+                console.error("Gagal load guru:", err);
+                alert("Data guru gagal dimuat. Cek URL Web App!");
+            }
         }
-          
 
         async function addPegawaiManual() {
         const nama = document.getElementById('newDataName').value;
