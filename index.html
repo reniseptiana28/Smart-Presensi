@@ -613,7 +613,6 @@ function doPost(e) {
                     // MENGIRIM DATA LENGKAP TERMASUK TANGGAL DAN WAKTU
                     await fetch(webhookUrl, {
                         method: 'POST',
-                        mode: 'no-cors',
                         body: JSON.stringify({ 
                             nama: item.nama, 
                             unit: item.unit, 
@@ -701,7 +700,6 @@ function doPost(e) {
         try {
             await fetch(webhookUrl, {
                 method: 'POST',
-                mode: 'no-cors',
                 body: JSON.stringify({
                     type: "tambah_guru",
                     nama: nama,
@@ -748,8 +746,13 @@ function doPost(e) {
         function openSetup() { document.getElementById('setupModal').classList.remove('hidden'); }
         function closeSetup() { document.getElementById('setupModal').classList.add('hidden'); }
 
-        window.onload = () => { 
-            loadGuruFromSheet(); 
+       window.onload = () => {
+            const saved = localStorage.getItem('webhookUrl');
+            if (saved) {
+                webhookUrl = saved;
+                document.getElementById('webhookUrlInput').value = saved;
+            }
+            loadGuruFromSheet();
         };
     </script>
 </body>
