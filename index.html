@@ -390,21 +390,13 @@ function doPost(e) {
     </div>
 
     <script>
-        // CONFIG & STATE
-        const INITIAL_GURU = {
-            "Guru SD": ["Ust. Ahmad Fauzi", "Ustz. Ratna Sari"],
-            "Guru SMP": ["Ust. Dr. Budi", "Ustz. Nur Azizah"],
-            "Guru SMA": ["Ust. Faisal Anwar", "Ustz. Linda"]
-        };
-
-        let presenceQueue = JSON.parse(localStorage.getItem('presenceQueue')) || [];
         let guruDatabase = {};
-        let webhookUrl = "https://script.google.com/macros/s/AKfycbwhE64AVDcW3Cpxrbvy1cnSkRR9LArMk6rT5fQ0K2hpNuc1LKmsUIYuy2l5Vn0RprsX0g/exec";
+        let webhookUrl = "";
         let stream = null;
         let viewMode = 'guru';
         let pendingAction = null;
-
-        // UI HELPERS
+        let presenceQueue = [];
+        let pollingInterval = null;
         
         function showToast(title, msg) {
             const t = document.getElementById('toast');
@@ -413,19 +405,17 @@ function doPost(e) {
             t.classList.remove('hidden');
             setTimeout(() => t.classList.add('hidden'), 3000);
         }
-
+        
         function openConfirm(title, msg, callback) {
             document.getElementById('confirmTitle').innerText = title;
             document.getElementById('confirmMessage').innerText = msg;
             document.getElementById('confirmModal').classList.remove('hidden');
             pendingAction = callback;
         }
-
+        
         function closeConfirm() { document.getElementById('confirmModal').classList.add('hidden'); }
-
-        document.getElementById('confirmYesBtn').onclick = () => { if(pendingAction) pendingAction(); closeConfirm(); };
-
-        // APP LOGIC
+        document.getElementById('confirmYesBtn').onclick = () => { if (pendingAction) pendingAction(); closeConfirm(); };
+        
         function renderUnitOptions() {
             const keys = Object.keys(guruDatabase).sort();
             const options = `<option value="">-- Pilih Unit --</option>` + keys.map(k => `<option value="${k}">${k}</option>`).join('');
@@ -433,162 +423,187 @@ function doPost(e) {
             document.getElementById('dataUnitSelect').innerHTML = options;
             document.getElementById('importUnitSelect').innerHTML = options;
         }
-
+        
         function updateGuruDropdown() {
             const unit = document.getElementById('unitSelect').value;
             const select = document.getElementById('guruSelect');
-            if(!unit) { select.innerHTML = `<option value="">-- Pilih Nama --</option>`; return; }
+            if (!unit) { select.innerHTML = `<option value="">-- Pilih Nama --</option>`; return; }
             const list = guruDatabase[unit] || [];
             select.innerHTML = `<option value="">-- Pilih Nama --</option>` + list.sort().map(n => `<option value="${n}">${n}</option>`).join('');
         }
-            async function addNewUnit() {
-                const val = document.getElementById('newCategoryInput').value.trim();
-                if (!val) return;
-            
-                try {
-                    await fetch(webhookUrl, {
-                        method: 'POST',
-                        body: JSON.stringify({ type: "tambah_unit", unit: val })
-                    });
-            
-                    document.getElementById('newCategoryInput').value = "";
-                    showToast("Sukses", "Unit berhasil ditambahkan");
-                    await loadGuruFromSheet();
-            
-                } catch (err) {
-                    console.error(err);
-                    showToast("Gagal", "Gagal menambahkan unit");
-                }
+        
+        async function loadGuruFromSheet() {
+            try {
+                const res = await fetch(webhookUrl);
+                const data = await res.json();
+                guruDatabase = data;
+                renderUnitOptions();
+                updateGuruDropdown();
+            } catch (err) {
+                console.error("Gagal load guru:", err);
+                showToast("Error", "Gagal memuat data pegawai");
             }
+        }
+        
+        async function loadAntrean() {
+            if (!webhookUrl) return;
+            try {
+                const res = await fetch(webhookUrl + "?type=antrean");
+                presenceQueue = await res.json();
+                renderQueue();
+                renderHistory();
+                updateJumlahMenunggu();
+            } catch (err) {
+                console.error("Gagal load antrean:", err);
+            }
+        }
         
         async function openCameraModal() {
             const unit = document.getElementById('unitSelect').value;
             const nama = document.getElementById('guruSelect').value;
-            if(!unit || !nama) return showToast("Gagal", "Pilih Unit & Nama dulu!");
-
+            if (!unit || !nama) return showToast("Gagal", "Pilih Unit & Nama dulu!");
             document.getElementById('activeUserLabel').innerText = `${nama} (${unit})`;
             document.getElementById('cameraModal').classList.remove('hidden');
-
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 1280, height: 720 } });
                 document.getElementById('video').srcObject = stream;
-            } catch(e) {
+            } catch (e) {
                 showToast("Error", "Gagal akses kamera.");
                 closeCameraModal();
             }
         }
-
+        
         function closeCameraModal() {
             document.getElementById('cameraModal').classList.add('hidden');
-            if(stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+            if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
         }
-
-        function processCapture() {
+        
+        async function processCapture() {
             const v = document.getElementById('video');
             const c = document.getElementById('canvas');
             const ctx = c.getContext('2d');
-            
+        
             const now = new Date();
-            // Gunakan format lokal Indonesia yang eksplisit
             const waktuStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const tanggalStr = now.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            
+        
             c.width = 1280; c.height = 720;
-            
             ctx.save();
-            ctx.translate(c.width, 0); 
+            ctx.translate(c.width, 0);
             ctx.scale(-1, 1);
             ctx.drawImage(v, 0, 0, c.width, c.height);
             ctx.restore();
-
-            // Watermark
+        
             const watermarkText = `${tanggalStr} - ${waktuStr}`;
             ctx.font = 'bold 28px "Plus Jakarta Sans", sans-serif';
-            ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+            ctx.shadowColor = "rgba(0,0,0,0.5)";
             ctx.shadowBlur = 8;
             ctx.lineWidth = 4;
-            ctx.strokeStyle = "rgba(0, 0, 0, 0.4)";
-            
+            ctx.strokeStyle = "rgba(0,0,0,0.4)";
             const textWidth = ctx.measureText(watermarkText).width;
             const posX = c.width - textWidth - 50;
             const posY = c.height - 50;
-
-            ctx.fillStyle = "rgba(6, 78, 59, 0.6)"; 
             const padding = 15;
+            ctx.fillStyle = "rgba(6,78,59,0.6)";
             ctx.beginPath();
             ctx.roundRect(posX - padding, posY - 30 - padding, textWidth + (padding * 2), 40 + padding, 15);
             ctx.fill();
-
             ctx.strokeText(watermarkText, posX, posY);
             ctx.fillStyle = "#ffffff";
             ctx.fillText(watermarkText, posX, posY);
-
+        
+            const foto = c.toDataURL('image/jpeg', 0.5);
             const item = {
                 id: Date.now(),
                 nama: document.getElementById('guruSelect').value,
                 unit: document.getElementById('unitSelect').value,
                 waktu: waktuStr,
                 tanggal: tanggalStr,
-                foto: c.toDataURL('image/jpeg', 0.8),
+                foto,
                 status: 'pending'
             };
-
-            presenceQueue.unshift(item);
-            localStorage.setItem('presenceQueue', JSON.stringify(presenceQueue));
+        
             closeCameraModal();
-            showToast("Sukses", "Foto presensi tersimpan di antrean.");
+            showToast("Mengirim...", "Menyimpan presensi ke server");
+        
+            try {
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({ type: "presensi", ...item })
+                });
+                showToast("Sukses", "Presensi berhasil dikirim!");
+            } catch (err) {
+                console.error(err);
+                showToast("Gagal", "Presensi gagal dikirim, coba lagi");
+            }
         }
-
+        
         function handleAdminAccess() {
-            if(viewMode === 'guru') document.getElementById('adminLoginModal').classList.remove('hidden');
+            if (viewMode === 'guru') document.getElementById('adminLoginModal').classList.remove('hidden');
             else toggleView();
         }
-
+        
         function checkAdminPassword() {
-            if(document.getElementById('adminPassword').value === 'admin123') {
+            if (document.getElementById('adminPassword').value === 'admin123') {
                 document.getElementById('adminLoginModal').classList.add('hidden');
                 document.getElementById('adminPassword').value = '';
                 toggleView();
             } else showToast("Gagal", "Kode Akses Salah");
         }
-
+        
         function toggleView() {
             const g = document.getElementById('guruPage');
             const a = document.getElementById('adminPage');
             const nt = document.getElementById('navText');
-            if(viewMode === 'guru') {
-                viewMode = 'admin'; g.classList.add('hidden'); a.classList.remove('hidden'); nt.innerText = "Keluar Portal";
+            if (viewMode === 'guru') {
+                viewMode = 'admin';
+                g.classList.add('hidden');
+                a.classList.remove('hidden');
+                nt.innerText = "Keluar Portal";
                 switchAdminTab('queue');
+                // Polling otomatis setiap 15 detik saat di halaman admin
+                pollingInterval = setInterval(loadAntrean, 15000);
             } else {
-                viewMode = 'guru'; g.classList.remove('hidden'); a.classList.add('hidden'); nt.innerText = "Portal Admin";
+                viewMode = 'guru';
+                g.classList.remove('hidden');
+                a.classList.add('hidden');
+                nt.innerText = "Portal Admin";
+                clearInterval(pollingInterval);
             }
         }
-
+        
         function switchAdminTab(tab) {
-            const q = document.getElementById('adminQueueSection');
-            const h = document.getElementById('adminHistorySection');
-            const d = document.getElementById('adminDataSection');
-            
-            [q, h, d].forEach(el => el.classList.add('hidden'));
-            ['tab-queue', 'tab-history', 'tab-data'].forEach(t => document.getElementById(t).classList.remove('tab-active', 'text-slate-400'));
-
-            if(tab === 'queue') { q.classList.remove('hidden'); document.getElementById('tab-queue').classList.add('tab-active'); renderQueue(); }
-            else if(tab === 'history') { h.classList.remove('hidden'); document.getElementById('tab-history').classList.add('tab-active'); renderHistory(); }
-            else { d.classList.remove('hidden'); document.getElementById('tab-data').classList.add('tab-active'); renderMaster(); }
+            ['adminQueueSection', 'adminHistorySection', 'adminDataSection'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            ['tab-queue', 'tab-history', 'tab-data'].forEach(t => {
+                document.getElementById(t).classList.remove('tab-active', 'text-slate-400');
+            });
+            if (tab === 'queue') {
+                document.getElementById('adminQueueSection').classList.remove('hidden');
+                document.getElementById('tab-queue').classList.add('tab-active');
+                loadAntrean();
+            } else if (tab === 'history') {
+                document.getElementById('adminHistorySection').classList.remove('hidden');
+                document.getElementById('tab-history').classList.add('tab-active');
+                renderHistory();
+            } else {
+                document.getElementById('adminDataSection').classList.remove('hidden');
+                document.getElementById('tab-data').classList.add('tab-active');
+                renderMaster();
+            }
         }
-
+        
         function updateJumlahMenunggu() {
-            const jumlah = presenceQueue.filter(item => item.status === 'pending').length;
+            const jumlah = presenceQueue.filter(i => i.status === 'pending').length;
             document.getElementById('count-menunggu').innerText = jumlah;
         }
-
+        
         function renderQueue() {
-            updateJumlahMenunggu();
             const list = document.getElementById('validationList');
             const empty = document.getElementById('emptyQueue');
             const pending = presenceQueue.filter(x => x.status === 'pending');
-
-            if(pending.length === 0) { list.innerHTML = ""; empty.classList.remove('hidden'); return; }
+            if (pending.length === 0) { list.innerHTML = ""; empty.classList.remove('hidden'); return; }
             empty.classList.add('hidden');
             list.innerHTML = pending.map(i => `
                 <tr class="hover:bg-emerald-50/50">
@@ -606,7 +621,7 @@ function doPost(e) {
                 </tr>
             `).join('');
         }
-
+        
         function renderHistory() {
             const list = document.getElementById('historyList');
             const history = presenceQueue.filter(x => x.status !== 'pending');
@@ -621,131 +636,149 @@ function doPost(e) {
                 </tr>
             `).join('');
         }
-
+        
         async function validate(id, status) {
-            const item = presenceQueue.find(x => x.id === id);
-            if(!item) return;
-
-            if(status === 'sah' && webhookUrl) {
-                const btn = document.getElementById(`act-${id}`);
-                btn.innerHTML = `<span class="text-[10px] font-bold animate-pulse">MENGIRIM...</span>`;
-                try {
-                    // MENGIRIM DATA LENGKAP TERMASUK TANGGAL DAN WAKTU
-                    await fetch(webhookUrl, {
-                        method: 'POST',
-                        body: JSON.stringify({ 
-                            nama: item.nama, 
-                            unit: item.unit, 
-                            tanggal: item.tanggal, 
-                            waktu: item.waktu, 
-                            status: "SAH" 
-                        })
-                    });
-                } catch(e) { console.error(e); }
+            const item = presenceQueue.find(x => String(x.id) === String(id));
+            if (!item) return;
+        
+            const btn = document.getElementById(`act-${id}`);
+            if (btn) btn.innerHTML = `<span class="text-[10px] font-bold animate-pulse">MEMPROSES...</span>`;
+        
+            try {
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        type: "validasi",
+                        id: item.id,
+                        status,
+                        nama: item.nama,
+                        unit: item.unit,
+                        tanggal: item.tanggal,
+                        waktu: item.waktu
+                    })
+                });
+                await loadAntrean();
+                showToast("Sukses", status === 'sah' ? "Presensi disahkan" : "Presensi ditolak");
+            } catch (err) {
+                console.error(err);
+                showToast("Gagal", "Gagal memproses validasi");
             }
-
-            item.status = status;
-            localStorage.setItem('presenceQueue', JSON.stringify(presenceQueue));
-            renderQueue();
-            renderHistory();
-            
-            updateJumlahMenunggu();
         }
-
+        
         function renderMaster() {
             const list = document.getElementById('masterPegawaiList');
             let html = "";
             Object.keys(guruDatabase).sort().forEach(unit => {
                 html += `<tr class="bg-slate-50/50"><td class="px-8 py-4 font-black text-emerald-950">${unit}</td><td></td><td class="text-center"><button onclick="deleteUnit('${unit}')" class="text-rose-400 font-bold text-[9px]">HAPUS UNIT</button></td></tr>`;
-                guruDatabase[unit].forEach((n, idx) => {
+                (guruDatabase[unit] || []).forEach((n, idx) => {
                     html += `<tr><td class="px-8 py-3 text-[10px] text-slate-300">— ${unit}</td><td class="px-8 py-3 text-sm font-bold text-slate-600">${n}</td><td class="px-8 py-3 text-center"><button onclick="deleteGuru('${unit}', ${idx})" class="text-slate-300 hover:text-rose-500">×</button></td></tr>`;
                 });
             });
             list.innerHTML = html;
             renderUnitOptions();
         }
-
+        
         function openImport() { document.getElementById('importModal').classList.remove('hidden'); }
         
-        function processImport() {
+        async function processImport() {
             const unit = document.getElementById('importUnitSelect').value;
             const text = document.getElementById('importArea').value.trim();
-            if(!unit || !text) return showToast("Gagal", "Unit atau Nama tidak boleh kosong");
-            
+            if (!unit || !text) return showToast("Gagal", "Unit atau Nama tidak boleh kosong");
             const names = text.split('\n').map(n => n.trim()).filter(n => n !== "");
-            guruDatabase[unit] = [...new Set([...guruDatabase[unit], ...names])];
-            saveData();
-            document.getElementById('importArea').value = "";
-            document.getElementById('importModal').classList.add('hidden');
-            showToast("Sukses", `Berhasil import ${names.length} pegawai.`);
-        }
-
-        function addNewUnit() {
-            const val = document.getElementById('newCategoryInput').value.trim();
-            if(!val) return;
-            guruDatabase[val] = [];
-            saveData();
-            document.getElementById('newCategoryInput').value = "";
-        }
-        
-        async function loadGuruFromSheet() {
-        try {
-        const res = await fetch(webhookUrl);
-        const data = await res.json();
-
-        guruDatabase = data;
-
-        // ✅ Tambahkan tiga baris ini:
-        localStorage.setItem('guruDatabase', JSON.stringify(guruDatabase));
-        renderMaster();        // update tabel di tab Pengaturan
-        renderUnitOptions();   // update dropdown unit
-        updateGuruDropdown();  // update dropdown nama pegawai
-
+            try {
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({ type: "import_massal", unit, names })
+                });
+                document.getElementById('importArea').value = "";
+                document.getElementById('importModal').classList.add('hidden');
+                showToast("Sukses", `Berhasil import ${names.length} pegawai`);
+                await loadGuruFromSheet();
             } catch (err) {
-                console.error("Gagal load guru:", err);
-                showToast("Error", "Gagal memuat data pegawai dari server.");
+                console.error(err);
+                showToast("Gagal", "Gagal import pegawai");
             }
         }
-
+        
+        async function addNewUnit() {
+            const val = document.getElementById('newCategoryInput').value.trim();
+            if (!val) return;
+            try {
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({ type: "tambah_unit", unit: val })
+                });
+                document.getElementById('newCategoryInput').value = "";
+                showToast("Sukses", "Unit berhasil ditambahkan");
+                await loadGuruFromSheet();
+            } catch (err) {
+                showToast("Gagal", "Gagal menambahkan unit");
+            }
+        }
+        
         async function addPegawaiManual() {
             const nama = document.getElementById('newDataName').value.trim();
             const unit = document.getElementById('dataUnitSelect').value;
-        
             if (!nama || !unit) return showToast("Gagal", "Nama dan unit harus diisi");
-        
             try {
                 await fetch(webhookUrl, {
                     method: 'POST',
                     body: JSON.stringify({ type: "tambah_guru", nama, unit })
                 });
-        
                 document.getElementById('newDataName').value = "";
                 showToast("Sukses", "Pegawai berhasil ditambahkan");
-        
-                // ✅ Ini jalan setelah POST benar-benar selesai
                 await loadGuruFromSheet();
-        
             } catch (err) {
-                console.error(err);
                 showToast("Gagal", "Gagal menambahkan pegawai");
             }
         }
-  
-        function deleteUnit(u) { openConfirm('Hapus Unit?', `Hapus unit ${u}?`, () => { delete guruDatabase[u]; saveData(); }); }
-        function deleteGuru(u, i) { guruDatabase[u].splice(i, 1); saveData(); }
-        function saveData() { localStorage.setItem('guruDatabase', JSON.stringify(guruDatabase)); renderMaster(); renderUnitOptions(); updateGuruDropdown(); }
-        function saveWebhook() { webhookUrl = document.getElementById('webhookUrlInput').value.trim(); localStorage.setItem('webhookUrl', webhookUrl); showToast("Sukses", "Link tersimpan."); }
-
+        
+        function deleteUnit(u) {
+            openConfirm('Hapus Unit?', `Hapus unit ${u} beserta semua pegawainya?`, async () => {
+                try {
+                    await fetch(webhookUrl, {
+                        method: 'POST',
+                        body: JSON.stringify({ type: "hapus_unit", unit: u })
+                    });
+                    await loadGuruFromSheet();
+                } catch (err) {
+                    showToast("Gagal", "Gagal menghapus unit");
+                }
+            });
+        }
+        
+        function deleteGuru(u, idx) {
+            const nama = guruDatabase[u][idx];
+            openConfirm('Hapus Pegawai?', `Hapus ${nama} dari ${u}?`, async () => {
+                try {
+                    await fetch(webhookUrl, {
+                        method: 'POST',
+                        body: JSON.stringify({ type: "hapus_guru", unit: u, nama })
+                    });
+                    await loadGuruFromSheet();
+                } catch (err) {
+                    showToast("Gagal", "Gagal menghapus pegawai");
+                }
+            });
+        }
+        
+        function saveWebhook() {
+            webhookUrl = document.getElementById('webhookUrlInput').value.trim();
+            localStorage.setItem('webhookUrl', webhookUrl);
+            showToast("Sukses", "Link tersimpan");
+            loadGuruFromSheet();
+        }
+        
         function exportToExcel() {
             const sah = presenceQueue.filter(x => x.status === 'sah');
-            if(sah.length === 0) return showToast("Info", "Tidak ada data sah untuk diekspor.");
+            if (sah.length === 0) return showToast("Info", "Tidak ada data sah untuk diekspor.");
             const data = sah.map(i => ({ "Tanggal": i.tanggal, "Waktu": i.waktu, "Nama Pegawai": i.nama, "Unit Kerja": i.unit, "Status": "SAH" }));
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.json_to_sheet(data);
             XLSX.utils.book_append_sheet(wb, ws, "Laporan Presensi");
             XLSX.writeFile(wb, `Laporan_Presensi_${Date.now()}.xlsx`);
         }
-
+        
         function openPhotoPreview(s, n, u, w) {
             document.getElementById('modalPreviewImg').src = s;
             document.getElementById('modalPreviewName').innerText = n;
@@ -755,14 +788,16 @@ function doPost(e) {
         function closePhotoPreview() { document.getElementById('photoPreviewModal').classList.add('hidden'); }
         function openSetup() { document.getElementById('setupModal').classList.remove('hidden'); }
         function closeSetup() { document.getElementById('setupModal').classList.add('hidden'); }
-
-       window.onload = () => {
+        
+        window.onload = async () => {
             const saved = localStorage.getItem('webhookUrl');
             if (saved) {
                 webhookUrl = saved;
                 document.getElementById('webhookUrlInput').value = saved;
+                await loadGuruFromSheet();
+            } else {
+                showToast("Info", "Masuk admin & simpan URL Google Sheet dulu");
             }
-            loadGuruFromSheet();
         };
     </script>
 </body>
