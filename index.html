@@ -711,7 +711,6 @@ function doPost(e) {
             }
         }
   
-        }
         function deleteUnit(u) { openConfirm('Hapus Unit?', `Hapus unit ${u}?`, () => { delete guruDatabase[u]; saveData(); }); }
         function deleteGuru(u, i) { guruDatabase[u].splice(i, 1); saveData(); }
         function saveData() { localStorage.setItem('guruDatabase', JSON.stringify(guruDatabase)); renderMaster(); renderUnitOptions(); updateGuruDropdown(); }
