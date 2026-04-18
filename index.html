@@ -669,56 +669,47 @@ function doPost(e) {
         }
         
         async function loadGuruFromSheet() {
-            try {
-                const res = await fetch(webhookUrl);
-                const text = await res.text();
-        
-                console.log("RESPONSE:", text); // DEBUG
-        
-                const data = JSON.parse(text);
-        
-                guruDatabase = data;
-        
-                renderUnitOptions();
-                updateGuruDropdown();
-        
+        try {
+        const res = await fetch(webhookUrl);
+        const data = await res.json();
+
+        guruDatabase = data;
+
+        // ✅ Tambahkan tiga baris ini:
+        localStorage.setItem('guruDatabase', JSON.stringify(guruDatabase));
+        renderMaster();        // update tabel di tab Pengaturan
+        renderUnitOptions();   // update dropdown unit
+        updateGuruDropdown();  // update dropdown nama pegawai
+
             } catch (err) {
                 console.error("Gagal load guru:", err);
-                alert("Data guru gagal dimuat. Cek URL Web App!");
+                showToast("Error", "Gagal memuat data pegawai dari server.");
             }
         }
 
         async function addPegawaiManual() {
-        const nama = document.getElementById('newDataName').value;
-        const unit = document.getElementById('dataUnitSelect').value;
-    
-        if (!nama || !unit) {
-            alert("Nama dan unit harus diisi");
-            return;
-        }
-    
-        try {
-            await fetch(webhookUrl, {
-                method: 'POST',
-                body: JSON.stringify({
-                    type: "tambah_guru",
-                    nama: nama,
-                    unit: unit
-                })
-            });
-    
-            alert("Guru berhasil ditambahkan");
-    
-            // reload data dari Google Sheet
-            loadGuruFromSheet();
-    
-            // kosongkan input
-            document.getElementById('newDataName').value = "";
-    
+            const nama = document.getElementById('newDataName').value.trim();
+            const unit = document.getElementById('dataUnitSelect').value;
+        
+            if (!nama || !unit) return showToast("Gagal", "Nama dan unit harus diisi");
+        
+            try {
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({ type: "tambah_guru", nama, unit })
+                });
+        
+                document.getElementById('newDataName').value = "";
+                showToast("Sukses", "Pegawai berhasil ditambahkan");
+        
+                // ✅ Ini jalan setelah POST benar-benar selesai
+                await loadGuruFromSheet();
+        
             } catch (err) {
                 console.error(err);
-                alert("Gagal menambahkan guru");
+                showToast("Gagal", "Gagal menambahkan pegawai");
             }
+        }
   
         }
         function deleteUnit(u) { openConfirm('Hapus Unit?', `Hapus unit ${u}?`, () => { delete guruDatabase[u]; saveData(); }); }
