@@ -399,7 +399,7 @@ function doPost(e) {
 
         let presenceQueue = JSON.parse(localStorage.getItem('presenceQueue')) || [];
         let guruDatabase = {};
-        let webhookUrl = localStorage.getItem('webhookUrl') || "";
+        let webhookUrl = "https://script.google.com/macros/s/AKfycbwhE64AVDcW3Cpxrbvy1cnSkRR9LArMk6rT5fQ0K2hpNuc1LKmsUIYuy2l5Vn0RprsX0g/exec";
         let stream = null;
         let viewMode = 'guru';
         let pendingAction = null;
@@ -737,9 +737,9 @@ function doPost(e) {
         function openSetup() { document.getElementById('setupModal').classList.remove('hidden'); }
         function closeSetup() { document.getElementById('setupModal').classList.add('hidden'); }
 
-        window.onload = () => { loadGuruFromSheet(); 
+        window.onload = () => { 
+            loadGuruFromSheet(); 
         };
-        loadGuruFromSheet();
     </script>
 </body>
 </html>
